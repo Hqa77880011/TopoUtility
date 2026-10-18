@@ -8,6 +8,21 @@ from scipy.linalg import helmert
 from scipy.stats import spearmanr
 
 
+def identification(difference, tasks, weights=None):
+    """Check task-by-edit directions after removing the softmax gauge."""
+    contrast = helmert(6, full=False).T
+    if weights is not None:
+        difference = weights * (difference - np.sum(weights * difference, axis=1, keepdims=True))
+    q = np.column_stack([tasks, np.ones(len(tasks))])
+    design = np.einsum("ni,nj->nij", difference @ contrast, q).reshape(len(q), -1)
+    singular = np.linalg.svd(design, compute_uv=False)
+    rank = int(np.linalg.matrix_rank(design))
+    condition = float(singular[0] / singular[-1]) if singular[-1] > 0 else None
+    if rank != design.shape[1] or condition is None or condition > 1e6:
+        raise ValueError("Task-by-edit design is confounded; vary tasks and independent edit directions")
+    return rank, condition
+
+
 def fit(signatures_a, signatures_b, tasks, labels, epochs, seed):
     torch.manual_seed(seed)
     q = torch.tensor(tasks, dtype=torch.float32)
@@ -37,6 +52,10 @@ def main():
     args = parser.parse_args()
     train = dict(np.load(args.train, allow_pickle=False))
     validation = dict(np.load(args.validation, allow_pickle=False))
+    train_groups = set(map(str, train["group"].tolist()))
+    validation_groups = set(map(str, validation["group"].tolist()))
+    if train_groups & validation_groups:
+        raise ValueError("Utility fitting and validation source objects overlap")
     X = train["signature_b"] - train["signature_a"]
     # Normalized utilities have five independent directions: sum(weights)=1.
     contrast_design = X @ helmert(6, full=False).T
@@ -47,6 +66,7 @@ def main():
         raise ValueError(
             "Edit design is rank-deficient or ill-conditioned; group confounded edit types before fitting"
         )
+    task_rank, task_condition = identification(X, train["task"])
     A, b = fit(
         train["signature_a"],
         train["signature_b"],
@@ -60,10 +80,16 @@ def main():
     weights /= weights.sum(-1, keepdims=True)
     difference = np.sum(weights * (validation["signature_b"] - validation["signature_a"]), axis=-1)
     agreement = float(np.mean((difference >= 0) == validation["preferred_a"]))
+    train_logits = train["task"] @ A.T + b
+    train_weights = np.exp(train_logits - train_logits.max(-1, keepdims=True))
+    train_weights /= train_weights.sum(-1, keepdims=True)
+    local_rank, local_condition = identification(X, train["task"], train_weights)
     rng = np.random.default_rng(args.seed)
     boot = []
     for replicate in range(args.bootstrap):
-        indices = rng.integers(len(X), size=len(X))
+        groups = np.unique(train["group"])
+        sampled = rng.choice(groups, len(groups), replace=True)
+        indices = np.concatenate([np.flatnonzero(train["group"] == group) for group in sampled])
         fitted_A, fitted_b = fit(
             train["signature_a"][indices],
             train["signature_b"][indices],
@@ -81,6 +107,11 @@ def main():
         "b": b.tolist(),
         "rank": rank,
         "condition_number": condition,
+        "task_design_rank": task_rank,
+        "task_design_condition": task_condition,
+        "local_utility_rank": local_rank,
+        "local_utility_condition": local_condition,
+        "utility_groups": sorted(train_groups | validation_groups),
         "validation_pairwise_agreement": agreement,
         "weight_intervals95": np.quantile(np.asarray(boot), [0.025, 0.975], axis=0).tolist(),
     }

@@ -48,10 +48,12 @@ class Model(nn.Module):
         super().__init__()
         self.method = method
         self.segmenter = UNet(cfg["channels"], cfg["width"])
+        self.excluded_groups = set()
         if method == "topoutility":
             payload = json.loads(Path(cfg["utility_path"]).read_text(encoding="utf-8"))
             if not payload["accepted"]:
                 raise ValueError("Utility did not pass identification/validation")
+            self.excluded_groups = set(payload["utility_groups"])
             self.register_buffer("A", torch.tensor(payload["A"], dtype=torch.float32))
             self.register_buffer("b", torch.tensor(payload["b"], dtype=torch.float32))
         else:

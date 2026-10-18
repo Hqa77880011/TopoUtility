@@ -19,13 +19,14 @@ from . import core
 class Arrays(Dataset):
     def __init__(self, path):
         with np.load(path, allow_pickle=False) as source:
+            self.groups = np.asarray(source["group"])
             self.data = {
                 k: np.asarray(source[k]) for k in source.files if k not in ("group", "split")
             }
         if "x" not in self.data or "y" not in self.data:
             raise ValueError("Dataset requires x and y arrays")
         self.length = len(self.data["x"])
-        if any(len(v) != self.length for v in self.data.values()):
+        if len(self.groups) != self.length or any(len(v) != self.length for v in self.data.values()):
             raise ValueError("Every array must share the sample axis")
 
     def __len__(self):
@@ -79,6 +80,11 @@ def train(config, data, output, method):
     model = core.Model(cfg, method).to(device)
     train_set = Arrays(Path(data) / "train.npz")
     validation_set = Arrays(Path(data) / "validation.npz")
+    fit_groups = set(map(str, train_set.groups.tolist()))
+    validation_groups = set(map(str, validation_set.groups.tolist()))
+    if fit_groups & validation_groups or (fit_groups | validation_groups) & model.excluded_groups:
+        raise ValueError("Segmentation train/validation and utility fitting objects must be disjoint")
+    fit_groups |= validation_groups
     if cfg["epochs"] < 1 or cfg["batch_size"] < 1:
         raise ValueError("epochs and batch_size must be positive")
     output = Path(output)
@@ -153,7 +159,8 @@ def train(config, data, output, method):
         if valid < best:
             best, stale = valid, 0
             torch.save(
-                {"state": model.state_dict(), "config": cfg, "method": method}, output / "model.pt"
+                {"state": model.state_dict(), "config": cfg, "method": method,
+                 "fit_groups": sorted(fit_groups)}, output / "model.pt"
             )
         else:
             stale += 1
@@ -175,6 +182,8 @@ def evaluate(checkpoint, data, output):
     model.load_state_dict(payload["state"])
     model.eval()
     source = Arrays(data)
+    if set(map(str, source.groups.tolist())) & (set(payload["fit_groups"]) | model.excluded_groups):
+        raise ValueError("Test objects overlap segmentation/utility fitting or validation objects")
     batches = DataLoader(source, batch_size=cfg["batch_size"])
     prediction, elapsed = {}, []
     operations = {"macs": 0}

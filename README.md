@@ -24,7 +24,7 @@ python -m pip install -e .
 
 Use procedural branching structures, [DRIVE](https://drive.grand-challenge.org/) or registered crack data. Utility-training, segmentation-training and final-test parent objects must be disjoint.
 
-Segmentation arrays are x, binary y, task descriptors and group. Optional path_pairs and independent failure labels enable functional evaluation. Utility files contain signature_a, signature_b, task, preferred_a and optional severity_difference.
+Segmentation arrays are x, binary y, task descriptors and group. Optional path_pairs and independent failure labels enable functional evaluation. Utility files contain signature_a, signature_b, task, preferred_a, source-object group and optional severity_difference. Utility train/validation objects must be disjoint; their groups are stored in the artifact and excluded from segmentation fitting and testing. Bootstrap resampling uses whole source groups.
 
 ```bash
 python -m topoutility prepare --source data/raw.npz --output data/prepared --seed 17
@@ -38,7 +38,7 @@ Use `group` to keep every derived view of one source object in the same partitio
 python -m topoutility.utility --train data/utility_train.npz --validation data/utility_validation.npz --output runs/utility.json
 ```
 
-The command checks rank and conditioning in the five-dimensional zero-sum tangent space of the six normalized edit weights, and refuses a confounded design. An accepted artifact is required by the full segmentation method; uniform and Dice controls do not load it.
+The command checks rank and conditioning in the five-dimensional zero-sum edit tangent, the task-by-edit augmented design (5 * (task_dimensions + 1) directions), and the fitted local softmax utility Jacobian. It refuses a confounded design. Task coordinates must vary independently of the intercept; remove a redundant one-hot coordinate when necessary. An accepted artifact is required by the full segmentation method; uniform and Dice controls do not load it.
 
 
 
@@ -80,3 +80,18 @@ python -m topoutility.pack --manifest data/manifest.jsonl --output data/raw.npz 
 ```
 
 Inference timing runs the deployment forward pass separately from calibration, commutation and other evaluator diagnostics, after one warmup. Batch P50/P95 and examples/s retain the configured batch size. MAC/FLOP counts cover Conv/Linear/GRU multiply-adds; process RSS includes the dataset and Python runtime.
+
+## Registered compact reproduction setting
+
+Width-16 thin-structure segmenter, 30 epochs and two task dimensions. Independent six-signature preferences fit the identifiable task-by-edit utility directions before freezing the utility in segmentation; a new image backbone is not needed.
+
+Run from the repository root after installation. The following commands use the registered setting; they are provided for execution and have not been run as part of the source review.
+
+```bash
+python -m topoutility.utility --train data/utility_train.npz --validation data/utility_validation.npz --epochs 300 --bootstrap 50 --output runs/reproduce_utility.json
+python -m topoutility prepare --source data/raw.npz --output data/reproduce --seed 17
+python -m topoutility suite --config configs/reproduce.json --data data/reproduce --output runs/reproduce
+python -m topoutility evaluate --checkpoint runs/reproduce/topoutility/model.pt --data data/reproduce/test.npz --output results/reproduce
+```
+
+Required external inputs: independent task/preference/signature files and group-disjoint segmentation images/masks. The formal input fields are specified above; preparation/training interfaces consume those fields directly. No particular paper dataset or pretrained task model is assumed beyond these declared inputs.
