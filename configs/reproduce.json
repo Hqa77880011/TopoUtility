@@ -10,5 +10,6 @@
   "width": 16,
   "task_dimensions": 2,
   "utility_weight": 0.2,
-  "utility_path": "runs/reproduce_utility.json"
+  "utility_path": "runs/reproduce_utility.json",
+  "input_source": "procedural_geometry_downstream_preferences"
 }

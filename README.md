@@ -83,15 +83,17 @@ Inference timing runs the deployment forward pass separately from calibration, c
 
 ## Registered compact reproduction setting
 
-Width-16 thin-structure segmenter, 30 epochs and two task dimensions. Independent six-signature preferences fit the identifiable task-by-edit utility directions before freezing the utility in segmentation; a new image backbone is not needed.
+Procedural branching structures provide noisy segmentation images and separate edited mask pairs. Preferences follow exact root-terminal reachability, route distortion and occupied-area costs, independently of fitted utilities and differentiable signatures. Utility and segmentation object IDs are disjoint. Signature preprocessing calls the exact shared core.signatures function; the existing identification and held-out acceptance checks remain active.
 
-Run from the repository root after installation. The following commands use the registered setting; they are provided for execution and have not been run as part of the source review.
+Generate the declared input process, preprocess it, then use the existing method entry points:
 
 ```bash
-python -m topoutility.utility --train data/utility_train.npz --validation data/utility_validation.npz --epochs 300 --bootstrap 50 --output runs/reproduce_utility.json
-python -m topoutility prepare --source data/raw.npz --output data/reproduce --seed 17
+python -m topoutility.synthetic --output data/generated --objects 60 --utility-objects 36 --seed 17
+python -m topoutility.synthetic --extract-signatures data/generated/utility_masks.npz --output data/generated/utility
+python -m topoutility prepare --source data/generated/segmentation.npz --output data/reproduce --seed 17
+python -m topoutility.utility --train data/generated/utility/utility_train.npz --validation data/generated/utility/utility_validation.npz --epochs 300 --bootstrap 50 --output runs/reproduce_utility.json
 python -m topoutility suite --config configs/reproduce.json --data data/reproduce --output runs/reproduce
 python -m topoutility evaluate --checkpoint runs/reproduce/topoutility/model.pt --data data/reproduce/test.npz --output results/reproduce
 ```
 
-Required external inputs: independent task/preference/signature files and group-disjoint segmentation images/masks. The formal input fields are specified above; preparation/training interfaces consume those fields directly. No particular paper dataset or pretrained task model is assumed beyond these declared inputs.
+`source.json` records the data-generating assumptions and seed. The configuration records `input_source`. All inputs for this selected setting are generated locally using installed package dependencies.
