@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from scipy.linalg import helmert
 from scipy.stats import spearmanr
 
 
@@ -37,8 +38,10 @@ def main():
     train = dict(np.load(args.train, allow_pickle=False))
     validation = dict(np.load(args.validation, allow_pickle=False))
     X = train["signature_b"] - train["signature_a"]
-    singular = np.linalg.svd(X, compute_uv=False)
-    rank = int(np.linalg.matrix_rank(X))
+    # Normalized utilities have five independent directions: sum(weights)=1.
+    contrast_design = X @ helmert(6, full=False).T
+    singular = np.linalg.svd(contrast_design, compute_uv=False)
+    rank = int(np.linalg.matrix_rank(contrast_design))
     condition = float(singular[0] / singular[-1]) if singular[-1] > 0 else None
     if rank < 5 or condition is None or condition > 1e6:
         raise ValueError(

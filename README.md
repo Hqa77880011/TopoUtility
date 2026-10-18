@@ -38,7 +38,7 @@ Use `group` to keep every derived view of one source object in the same partitio
 python -m topoutility.utility --train data/utility_train.npz --validation data/utility_validation.npz --output runs/utility.json
 ```
 
-The command refuses a confounded edit design. An accepted artifact is required by the full segmentation method; uniform and Dice controls do not load it.
+The command checks rank and conditioning in the five-dimensional zero-sum tangent space of the six normalized edit weights, and refuses a confounded design. An accepted artifact is required by the full segmentation method; uniform and Dice controls do not load it.
 
 
 
